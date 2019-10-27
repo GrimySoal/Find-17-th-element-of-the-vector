@@ -54,7 +54,7 @@ public:
 	void setVector(const std::vector<int>& vector) {
 		vector_ = vector;
 	}
-	void setController(IController*controller) {
+	void setController(IController* controller) {
 		controller_ = controller;
 	}
 	auto createIterator() const {
@@ -169,26 +169,6 @@ public:
 	}
 };
 
-class Observer {
-public:
-	virtual Model::Iterator handleEvent(Model* model, Model::Iterator* iter) = 0;
-};
-
-class CreateIterator : public Observer {
-public:
-	Model::Iterator handleEvent(Model* model, Model::Iterator* iter) override {
-		return model->createIterator();
-	}
-};
-
-class SetIteratorStrategy : public Observer {
-public:
-	Model::Iterator handleEvent(Model* model, Model::Iterator* iter) override {
-		iter->setStrategy(&EveryEl::getObj());
-		return *iter;
-	}
-};
-
 class Delegation {
 public:
 	virtual void doStuff(Model::Iterator* it) = 0;
@@ -241,18 +221,57 @@ public:
 	}
 };
 
+class Observer {
+public:
+	virtual Model::Iterator handleEvent(Model* model, Model::Iterator* iter) = 0;
+};
+
+class CreateIterator : public Observer {
+public:
+	Model::Iterator handleEvent(Model* model, Model::Iterator* iter) override {
+		return model->createIterator();
+	}
+};
+
+class SetIteratorStrategy : public Observer {
+public:
+	Model::Iterator handleEvent(Model* model, Model::Iterator* iter) override {
+		iter->setStrategy(&EveryEl::getObj());
+		return *iter;
+	}
+};
+
+class Creator {
+public:
+	virtual Observer* factoryMethod() = 0;
+};
+
+class CreatorForCreateIterator : public Creator {
+public:
+	Observer* factoryMethod() override {
+		return new CreateIterator();
+	}
+};
+
+class CreatorForSetIteratorStrategy : public Creator {
+public:
+	Observer* factoryMethod() override {
+		return new SetIteratorStrategy();
+	}
+};
+
 class Cout17El : public Command {
 private:
-	std::vector<Observer*> observers_;
+	std::vector<Creator*> observers_;
 public:
 	Cout17El() {
-		observers_.push_back(new CreateIterator);
-		observers_.push_back(new SetIteratorStrategy);
+		observers_.push_back(new CreatorForCreateIterator);
+		observers_.push_back(new CreatorForSetIteratorStrategy);
 	}
 	void notify() override {
 		Model::Iterator* p = nullptr;
 		for (int i = 0; i < observers_.size(); ++i) {
-			p = &(observers_[i]->handleEvent(model_, p));
+			p = &(observers_[i]->factoryMethod()->handleEvent(model_, p));
 		}
 		DoStuff obj;
 		obj.toUsItWay();
@@ -339,10 +358,10 @@ private:
 	std::vector<Command*> done_commands_;
 	Command* cur_command_;
 public:
-	Controller(const std::vector<int>& vector) {
+	Controller(const std::vector<int>& vector, IController* proxy) {
 		model_ = new Model;
 		view_ = new View;
-		ModelBuilder obj(model_, vector, this);
+		ModelBuilder obj(model_, vector, proxy);
 		cur_command_ = nullptr;
 	}
 	void cout17El() override {
@@ -364,7 +383,7 @@ private:
 	IController*controller_;
 public:
 	ProxyController(const std::vector<int>& vector) {
-		controller_ = new Controller(vector);
+		controller_ = new Controller(vector, this);
 	}
 	void cout17El() override {
 		controller_->cout17El();
